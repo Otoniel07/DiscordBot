@@ -4,13 +4,12 @@ import sqlite3
 import config
 
 import discord
-from discord.ext import commands
+from discord.ext import tasks, commands
 
 class Levels(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         # Open connection to SQLite DB
-        # src_dir = os.path.join(os.path.dirname(__file__))
         src_dir = os.path.abspath(os.path.join(os.path.dirname( __file__ ), '..'))
         self.db = sqlite3.connect(os.path.join(src_dir, config.DB_NAME))
         self.db_cursor = self.db.cursor()
@@ -19,6 +18,8 @@ class Levels(commands.Cog):
         # Create `monthly stats` 
         self.current_month = datetime.date.today().strftime("%B_%Y") # Format current time to Month-Year
         self.db_cursor.execute('''CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY, exp_this_month INTEGER, points_this_month INTEGER)'''.format(self.current_month))
+        
+        self.lb_update.start()
             
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -76,6 +77,7 @@ class Levels(commands.Cog):
         self.db_cursor.execute('UPDATE users SET level=?, exp=?, points=? WHERE id=?', (user_level, user_exp, user_points, str(message.author.id)))
         self.db.commit()
 
+    # Commands
     @commands.command()
     async def leaderboard(self, ctx):
         channel = ctx.message.channel
@@ -88,6 +90,34 @@ class Levels(commands.Cog):
             user_id, user_exp, user_points = user_info
             embed.add_field(name=self.bot.get_user(user_id).name, value="{} exp gained".format(user_exp), inline=False)
         await channel.send(embed=embed)
+    
+    # Background Tasks
+    @tasks.loop(seconds=60)
+    async def lb_update(self):
+        print("Updating leaderboard")
+        channel = self.bot.get_channel(config.LEADERBOARD_CHANNEL)
+        if not channel:
+            print("Batch update error in levels cog: channel {} not found.".format(config.LEADERBOARD_CHANNEL))
+            return
+        
+        current_month = datetime.date.today().strftime("%B_%Y")
+        self.db_cursor.execute('SELECT * FROM {} ORDER BY exp_this_month DESC'.format(current_month))
+        query_response = self.db_cursor.fetchmany(5)
+
+        leaderboard_str = "Most exp gained this month: \n"
+        for user_info in query_response:
+            user_id, user_exp, user_points = user_info
+            self.db_cursor.execute('SELECT level FROM users WHERE id=?', (user_id,) )
+            user_level = self.db_cursor.fetchone()[0]
+            leaderboard_str += "Level {} - <@{}> - {} Exp \n".format(user_level, user_id, user_exp)
+
+        messages = await channel.history(limit=1).flatten()
+        if not messages:
+            # Leaderboard messages haven't been sent before
+            await channel.send(content=leaderboard_str)
+        else:
+            await messages[0].edit(content=leaderboard_str)
+        
 
 def setup(bot):
     bot.add_cog(Levels(bot))
