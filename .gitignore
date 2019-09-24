@@ -2,3 +2,4 @@
 *.db
 *.png
 *.pyc
+src/config.py
