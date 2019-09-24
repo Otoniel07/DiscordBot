@@ -1,9 +1,6 @@
-import os
+import config
+
 import discord
-import datetime
-import sqlite3
-
-
 from discord.ext import commands
 
 bot = commands.Bot(command_prefix='-')
@@ -22,7 +19,8 @@ async def on_ready():
     print(bot.user.name)
     print(bot.user.id)
     print('------')
-    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="RichardBotV2"))
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="Richard"))
     
 bot.load_extension(f'cogs.levels')
-bot.run('NjE5NjcwMjA0NTA2NzAxODI5.XXLnDQ.uTTPbzdTICaJLT9GWFIik1i8IcQ')
+bot.load_extension(f'cogs.fun')
+bot.run(config.TOKEN)
