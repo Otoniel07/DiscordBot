@@ -49,7 +49,7 @@ class Levels(commands.Cog):
         # Unpack the results and award exp/points
         user_id, user_exp, user_points = query_response
         user_exp += config.EXP_PER_MSG
-        user_points += config.PTS_PER_CHAR * len(message.content)
+        user_points += config.PTS_PER_CHAR * len(message.content) + 20 * int(len(message.attachments))
 
         # Update the DB
         self.db_cursor.execute('UPDATE {} SET exp_this_month=?, points_this_month=? WHERE id=?'.format(current_month), (user_exp, user_points, str(message.author.id)))
