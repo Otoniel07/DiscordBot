@@ -19,7 +19,7 @@ async def on_ready():
     print(bot.user.name)
     print(bot.user.id)
     print('------')
-    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="Richard"))
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="Yuki's Morale"))
     
 bot.load_extension(f'cogs.levels')
 bot.load_extension(f'cogs.fun')
