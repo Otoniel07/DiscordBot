@@ -32,9 +32,9 @@ class Levels(commands.Cog):
             return
 
         await self.update_user_data(message)
-        await self.update_monthly_data(message)
+        await self.update_monthly_exp(message)
 
-    async def update_monthly_data(self, message):
+    async def update_monthly_exp(self, message):
         # Fetch user info from database
         current_month = datetime.date.today().strftime("%B_%Y")
         self.db_cursor.execute('SELECT * FROM {} WHERE id=?'.format(current_month), (str(message.author.id), ))
@@ -49,7 +49,7 @@ class Levels(commands.Cog):
         # Unpack the results and award exp/points
         user_id, user_exp, user_points = query_response
         user_exp += config.EXP_PER_MSG
-        user_points += config.PTS_PER_MSG
+        user_points += config.PTS_PER_CHAR * len(message.content)
 
         # Update the DB
         self.db_cursor.execute('UPDATE {} SET exp_this_month=?, points_this_month=? WHERE id=?'.format(current_month), (user_exp, user_points, str(message.author.id)))
@@ -69,7 +69,7 @@ class Levels(commands.Cog):
         # Unpack the results and award exp/points
         user_id, user_level, user_exp, user_points = query_response
         user_exp += config.EXP_PER_MSG
-        user_points += config.PTS_PER_MSG
+        user_points += config.PTS_PER_CHAR
 
         # Calculate actual level. If a level up occurs, send a message
         actual_level = int(user_exp / 100 + 1)
@@ -89,11 +89,11 @@ class Levels(commands.Cog):
         
         # Get this month's leaderboard
         current_month = datetime.date.today().strftime("%B_%Y")
-        self.db_cursor.execute('SELECT * FROM {} ORDER BY exp_this_month DESC'.format(current_month))
-        query_response = self.db_cursor.fetchmany(6)
+        self.db_cursor.execute('SELECT * FROM {} WHERE id!=? ORDER BY exp_this_month DESC'.format(current_month), (str(config.ADMIN_ID),))
+        query_response = self.db_cursor.fetchmany(5)
 
         # Format results as an embed
-        embed = self.generate_embed(query_response)
+        embed = self.generate_exp_embed(query_response)
         await channel.send(embed=embed)
     
     # Background Tasks
@@ -105,44 +105,48 @@ class Levels(commands.Cog):
             print("Batch update error in levels cog: channel {} not found.".format(config.LEADERBOARD_CHANNEL))
             return
         
-        # Get this month's leaderboard
+        # Get this month's exp leaderboard
         current_month = datetime.date.today().strftime("%B_%Y")
-        self.db_cursor.execute('SELECT * FROM {} ORDER BY exp_this_month DESC'.format(current_month))
-        query_response = self.db_cursor.fetchmany(6)
+        self.db_cursor.execute('SELECT * FROM {} WHERE id!=? ORDER BY exp_this_month DESC'.format(current_month), (str(config.ADMIN_ID),))
+        query_response = self.db_cursor.fetchmany(5)
+        exp_embed = self.generate_exp_embed(query_response)
 
-        # Format the content as a string
-        # Scheduled for deletion -- Using embed instead
-        # leaderboard_str = "Most exp gained this month: \n"
-        # for user_info in query_response:
-        #     user_id, user_exp, user_points = user_info
-        #     if user_id == config.ADMIN_ID:
-        #         continue
-        #     # Monthly leaderboard doesn't have user level, so fetch from `users` table
-        #     self.db_cursor.execute('SELECT level FROM users WHERE id=?', (user_id,) )
-        #     user_level = self.db_cursor.fetchone()[0]
-        #     # Format user info as string and append to the content string
-        #     leaderboard_str += "Level {} - <@{}> - {} Exp \n".format(config.LEVEL_IMAGES[user_level], user_id, user_exp)
-        embed = self.generate_embed(query_response)
+        # Get this month's point leaderboard
+        self.db_cursor.execute('SELECT * FROM {} WHERE id!=? ORDER BY points_this_month DESC'.format(current_month), (str(config.ADMIN_ID),))
+        query_response = self.db_cursor.fetchmany(5)
+        pts_embed = self.generate_pts_embed(query_response)
 
         # Get the last message in the channel
-        messages = await channel.history(limit=1).flatten()
+        messages = await channel.history(limit=2).flatten()
         # If no messages exist, send the message. Otherwise edit existing messages
         if not messages:
-            await channel.send(embed=embed)
+            await channel.send(embed=exp_embed)
+            await channel.send(embed=pts_embed)
         else:
-            await messages[0].edit(embed=embed)
+            await messages[1].edit(embed=exp_embed)
+            await messages[0].edit(embed=pts_embed)
     
-    def generate_embed(self, query_response):
+    def generate_exp_embed(self, query_response):
         embed = discord.Embed(title="Most exp gained this month:", color=0x0092ff)
         for user_info in query_response:
             user_id, user_exp, user_points = user_info
-            if user_id == config.ADMIN_ID:
-                continue
             # Monthly leaderboard doesn't have user level, so fetch from `users` table
             self.db_cursor.execute('SELECT level FROM users WHERE id=?', (user_id,) )
             user_level = self.db_cursor.fetchone()[0]
             embed.add_field(name="{} {}".format(config.LEVEL_IMAGES[user_level], self.bot.get_user(user_id).name), 
                             value="{} exp".format(user_exp), 
+                            inline=False)
+        return embed
+
+    def generate_pts_embed(self, query_response):
+        embed = discord.Embed(title="Most points gained this month:", color=0xdadada)
+        for user_info in query_response:
+            user_id, user_exp, user_points = user_info
+            # Monthly leaderboard doesn't have user level, so fetch from `users` table
+            self.db_cursor.execute('SELECT level FROM users WHERE id=?', (user_id,) )
+            user_level = self.db_cursor.fetchone()[0]
+            embed.add_field(name="{} {}".format(config.LEVEL_IMAGES[user_level], self.bot.get_user(user_id).name), 
+                            value="{} points".format(user_points), 
                             inline=False)
         return embed
 
